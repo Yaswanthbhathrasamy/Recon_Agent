@@ -1,0 +1,15 @@
+crewai
+langchain
+langgraph
+langchain-openai
+langchain-community
+langsmith
+python-dotenv
+python-whois
+beautifulsoup4
+dnspython
+python-nmap
+shodan
+python-Wappalyzer
+fpdf2
+requests
