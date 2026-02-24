@@ -66,7 +66,7 @@ It generates structured findings in **JSON format** and professional **PDF repor
 ## 📦 Installation
 
 ```bash
-git clone https://github.com/Yaswanthbhathrasamy/Recon_Agent-.git
+git clone https://github.com/Yaswanthbhathrasamy/Recon_Agent.git
 cd Recon_Agents
 
 python3 -m venv venv
