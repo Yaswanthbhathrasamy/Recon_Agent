@@ -2,8 +2,8 @@ from crewai import Agent
 from langchain_openai import ChatOpenAI
 from src.tools.web_tools import web_scraper, http_header_analyzer
 from src.tools.osint_tools import whois_lookup, dns_lookup, shodan_lookup
-from src.tools.network_tools import nmap_port_scanner
-from src.tools.advanced_web_tools import wappalyzer_detection, subdomain_enumeration, directory_brute_force, email_harvester
+from src.tools.network_tools import nmap_port_scanner, live_host_checker
+from src.tools.advanced_web_tools import wappalyzer_detection, subdomain_enumeration, directory_brute_force, email_harvester, js_recon, parameter_discovery
 from src.tools.misc_recon_tools import ssl_certificate_info, wayback_machine_osint
 import os
 from dotenv import load_dotenv
@@ -69,6 +69,45 @@ vulnerability_analyst = Agent(
     tools=[
         nmap_port_scanner, 
         shodan_lookup
+    ],
+    llm=llm
+)
+
+# 5. Live Host Analyst
+live_host_analyst = Agent(
+    role='Live Host Analyst',
+    goal='Verify which target infrastructure assets and subdomains are actively responding to requests.',
+    backstory='A network specialist focused on verifying up-time and pinging servers to map out actual live endpoints.',
+    verbose=True,
+    allow_delegation=False,
+    tools=[
+        live_host_checker
+    ],
+    llm=llm
+)
+
+# 6. JavaScript Recon Analyst
+js_recon_analyst = Agent(
+    role='JavaScript Recon Analyst',
+    goal='Analyze JavaScript files on the target to uncover hidden API endpoints, internal routes, and hardcoded secrets.',
+    backstory='An application security expert who dissects client-side code to find vulnerabilities hiding in plain sight within JS files.',
+    verbose=True,
+    allow_delegation=False,
+    tools=[
+        js_recon
+    ],
+    llm=llm
+)
+
+# 7. Parameter Discovery Analyst
+parameter_discovery_analyst = Agent(
+    role='Parameter Discovery Analyst',
+    goal='Fuzz and discover hidden GET/POST parameters on target endpoints to expand potential injection vectors.',
+    backstory='A meticulous fuzzer who understands how hidden parameters lead to IDOR, SQLi, and open redirect vulnerabilities.',
+    verbose=True,
+    allow_delegation=False,
+    tools=[
+        parameter_discovery
     ],
     llm=llm
 )
