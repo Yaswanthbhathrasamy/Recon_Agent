@@ -6,7 +6,7 @@
 
 ## 👨‍💻 Author
 **Yaswanth B**  
-B.Tech Computer Science | AI & Cybersecurity Enthusiast  
+AI & Cybersecurity Enthusiast  
 
 ---
 
