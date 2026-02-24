@@ -1,175 +1,160 @@
 # 🚀 AI Recon Agent
 
-> AI-powered reconnaissance and OSINT automation framework built using CrewAI, LangChain, and LangGraph.
+> An AI-powered, multi-agent reconnaissance and OSINT automation framework built using CrewAI, LangChain, and LangGraph.
 
 ---
 
-## 👨‍💻 Author
-**Yaswanth B**  
-AI & Cybersecurity Enthusiast  
+## 📖 Overview
+
+**AI Recon Agent** is a modular, agent-orchestrated reconnaissance framework designed to automate attack surface discovery and intelligence gathering for web assets.
+
+It combines:
+
+- 🤖 Multi-Agent Collaboration (CrewAI)
+- 🧠 LLM-Driven Reasoning (LangChain + OpenAI)
+- 🔄 Parallel Workflow Orchestration (LangGraph)
+- 📊 Structured Reporting (JSON + PDF)
+
+The system performs structured reconnaissance across network, application, and client-side layers and generates professional security reports.
 
 ---
 
-## 📌 Overview
+## 🎯 Objectives
 
-AI Recon Agent is a modular, agent-orchestrated reconnaissance framework designed to automate intelligence gathering on domains and IP addresses.
-
-The system leverages:
-- Multi-agent collaboration (CrewAI)
-- Structured execution graph (LangGraph)
-- LLM reasoning (LangChain + OpenAI)
-
-It generates structured findings in **JSON format** and professional **PDF reports**.
+- Automate structured web reconnaissance
+- Reduce manual enumeration effort
+- Map attack surfaces efficiently
+- Provide machine-readable and human-readable outputs
+- Enable future AI-driven vulnerability prioritization
 
 ---
 
-## 🕵️‍♂️ Web Reconnaissance Methodology
+# 🕵️ Reconnaissance Methodology
 
-This project aligns with a structured methodology to identify potential attack surfaces effectively:
+The framework follows a layered methodology aligned with real-world security assessment workflows.
 
-1️⃣ **Subdomain Enumeration & Live Host Checking**
-**What is present?**
-- Active servers
-- Dead/parked domains
-- Redirected hosts
-- CDN-protected services
+---
 
-2️⃣ **Port Scanning**
-**What is present?**
+## 1️⃣ Subdomain Enumeration & Live Host Verification
+
+**Purpose:** Expand and validate attack surface.
+
+**Identifies:**
+- Discovered subdomains
+- Active vs inactive hosts
+- Redirected infrastructure
+- CDN/WAF-protected services
+
+---
+
+## 2️⃣ Port Scanning & Service Detection
+
+**Purpose:** Detect exposed network services.
+
+**Identifies:**
 - Open ports (80, 443, 22, 21, 8080, etc.)
-- Running services (SSH, FTP, MySQL)
+- Running services (SSH, FTP, MySQL, HTTP)
 - Service versions
-- Misconfigured services
+- Potential misconfigurations
 
-3️⃣ **Technology Detection**
-**What is present?**
-- Web server (Apache, Nginx, IIS)
-- Backend language (PHP, Python, Node, Java)
-- Framework (Django, Laravel, Spring)
-- CMS (WordPress)
-- JS libraries
-- Version numbers
+---
 
-4️⃣ **Directory & File Enumeration**
-**What is present?**
+## 3️⃣ Technology Fingerprinting
 
-Hidden endpoints:
+**Purpose:** Identify underlying tech stack.
+
+**Detects:**
+- Web servers (Apache, Nginx, IIS)
+- Backend frameworks (Django, Laravel, Spring)
+- CMS platforms
+- JavaScript libraries
+- Version disclosures
+
+---
+
+## 4️⃣ Directory & File Enumeration
+
+**Purpose:** Discover hidden or sensitive endpoints.
+
+**Common Findings:**
 - `/admin`
 - `/backup`
 - `/.git`
 - `/config`
 - `/api`
 - `/dashboard`
-- Exposed configuration files
-- Old backup files
 - Debug endpoints
+- Exposed configuration files
 
-👉 Direct access to sensitive areas.
+---
 
-5️⃣ **JavaScript Recon**
-**What is present?**
+## 5️⃣ JavaScript Reconnaissance
+
+**Purpose:** Analyze client-side logic for hidden attack surface.
+
+**Extracts:**
 - Hidden API endpoints
 - Internal routes
 - Hardcoded API keys
 - Access tokens
-- Secret parameters
-- Business logic
+- Business logic exposure
 - WebSocket endpoints
 
-👉 Modern apps expose most logic in JS.
+Modern applications often expose critical logic within JavaScript — this stage is essential.
 
-6️⃣ **Parameter Discovery**
-**What is present?**
-- GET parameters (`?id=`)
-- POST parameters
+---
+
+## 6️⃣ Parameter Discovery
+
+**Purpose:** Identify input vectors for injection testing.
+
+**Discovers:**
+- GET parameters (`?id=`, `?user=`)
+- POST body fields
 - Hidden parameters
-- JSON request fields
-- Cookie-based parameters
+- JSON keys
+- Cookie-based inputs
 
-👉 These may lead to:
+These inputs may lead to:
 - SQL Injection
 - IDOR
 - LFI
 - Open Redirect
 - SSRF
 
-7️⃣ **Authentication & Access Control Testing**
-Verifying authorization mechanisms to detect broken access control and privilege escalation vulnerabilities.
+---
+
+## 7️⃣ Authentication & Access Control Analysis
+
+**Purpose:** Evaluate authorization mechanisms.
+
+**Checks:**
+- Admin panel exposure
+- Role-based access enforcement
+- JWT token structure
+- Rate limiting
+- Privilege escalation paths
 
 ---
 
-## 🧠 Architecture
+# 🧠 Architecture
 
-- **Web Recon Agent** → Scraping, headers, directory discovery, SSL info  
-- **OSINT Agent** → WHOIS, DNS, historical snapshots  
-- **Subdomain Agent** → Comprehensive subdomain enumeration  
-- **Live Host Agent** → ICMP/Ping checks, WAF/CDN detection, active services  
-- **Vulnerability Agent** → Nmap scanning, port analysis, threat exposure checks  
-- **JavaScript Recon Agent** → API key hunting, hidden endpoint exposure  
-- **Parameter Discovery Agent** → Fuzzing GET/POST variables for IDOR/SQLi  
-- **Report Engine** → Structured JSON + PDF generation  
-- **LangGraph Orchestrator** → Controls parallel execution workflow  
+## 🔹 Agent-Based Design
 
----
-
-## ✨ Features
-
-✔ Parallel Agent orchestration (LangGraph)  
-✔ Web content scraping  
-✔ HTTP header analysis  
-✔ Subdomain enumeration  
-✔ WHOIS & DNS records  
-✔ Wayback historical data  
-✔ Open port scanning (Nmap)  
-✔ Technology fingerprinting  
-✔ Structured JSON output  
-✔ Automated PDF reporting  
+| Agent | Responsibility |
+|-------|---------------|
+| Web Recon Agent | Scraping, headers, directory discovery |
+| OSINT Agent | WHOIS, DNS, historical data |
+| Subdomain Agent | Asset expansion |
+| Live Host Agent | Active host verification |
+| Vulnerability Agent | Port & service scanning |
+| JavaScript Recon Agent | JS endpoint & secret extraction |
+| Parameter Discovery Agent | Input surface mapping |
+| Report Engine | JSON & PDF generation |
+| LangGraph Orchestrator | Parallel workflow execution |
 
 ---
 
-## 🛠 Tech Stack
+## 🔄 Parallel Execution Flow
 
-- Python 3.10+
-- CrewAI
-- LangChain
-- LangGraph
-- Requests
-- BeautifulSoup
-- Python-WHOIS
-- Nmap
-- ReportLab
-- OpenAI API
-
----
-
-## 📦 Installation
-
-```bash
-git clone https://github.com/Yaswanthbhathrasamy/Recon_Agent.git
-cd Recon_Agents
-
-python3 -m venv venv
-source venv/bin/activate
-
-pip install -r requirements.txt
-
-
-## Usage
-
-Simply run `main.py` pointing to a target domain or URL.
-
-```bash
-python main.py example.com
-```
-
-### Options
-- `--format`: Set to `json`, `pdf`, or `both` (default is `both`).
-- `--verbose`: Enable verbose logging to see agent actions.
-
-Example:
-```bash
-python main.py example.com --format pdf --verbose
-```
-
-### Reports
-Results will be saved in the `src/reports/` directory with a timestamp.
+The system uses **LangGraph** to execute reconnaissance stages concurrently, improving efficiency and fault isolation.
