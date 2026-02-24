@@ -41,8 +41,20 @@ osint_analyst = Agent(
     tools=[
         whois_lookup, 
         dns_lookup, 
-        subdomain_enumeration, 
         wayback_machine_osint
+    ],
+    llm=llm
+)
+
+# 4. Subdomain Analyst
+subdomain_analyst = Agent(
+    role='Subdomain Analyst',
+    goal='Identify all active and historical subdomains for the target to expand the attack surface area.',
+    backstory='An expert in attack surface management, relying on certificate transparency and enumeration to find forgotten or hidden subdomains.',
+    verbose=True,
+    allow_delegation=False,
+    tools=[
+        subdomain_enumeration
     ],
     llm=llm
 )
