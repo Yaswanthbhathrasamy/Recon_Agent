@@ -107,3 +107,110 @@ def email_harvester(url: str) -> str:
          return output
      except Exception as e:
           return f"Error harvesting emails from {url}: {e}"
+
+@tool
+def js_recon(url: str) -> str:
+    """Scrapes a webpage for linked JavaScript files and extracts hidden endpoints, API keys, and routes."""
+    try:
+        from bs4 import BeautifulSoup
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        js_files = []
+        
+        for script in soup.find_all('script'):
+            src = script.get('src')
+            if src:
+                # Handle relative URLs
+                if src.startswith('/'):
+                    parsed_url = urlparse(url)
+                    base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+                    src = base_url + src
+                elif not src.startswith('http'):
+                    src = url.rstrip('/') + '/' + src
+                js_files.append(src)
+                
+        if not js_files:
+            return f"No external JavaScript files found on {url}."
+            
+        output = f"JavaScript Recon for {url}:\nFound {len(js_files)} JS files.\n"
+        
+        # We only analyze the first 3 files to avoid context limits and long execution
+        for js_url in js_files[:3]:
+            try:
+                js_resp = requests.get(js_url, headers=headers, timeout=5)
+                if js_resp.status_code == 200:
+                    content = js_resp.text
+                    
+                    # Search for endpoints /api/...
+                    endpoints = set(re.findall(r'[\'"](/api/[^\'"]+)[\'"]', content) + re.findall(r'[\'"](https?://[^\'"]+)[\'"]', content))
+                    
+                    # Search for potential keys
+                    keys = set(re.findall(r'(?i)(?:api_key|apikey|secret|token)[\s:=]+[\'"]([a-zA-Z0-9_\-]{16,})[\'"]', content))
+                    
+                    output += f"\nFile: {js_url}\n"
+                    if endpoints:
+                        output += f"  - Potential Endpoints found: {len(endpoints)} (e.g., {list(endpoints)[:3]})\n"
+                    if keys:
+                        output += f"  - Potential Secrets found: {len(keys)}\n"
+                    if not endpoints and not keys:
+                         output += "  - No immediate secrets or endpoints found via regex.\n"
+            except Exception:
+                output += f"\nFile: {js_url} (Failed to load)\n"
+                
+        if len(js_files) > 3:
+             output += f"\n...and {len(js_files) - 3} more files not analyzed deeply."
+             
+        return output
+    except Exception as e:
+        return f"Error performing JS Recon on {url}: {e}"
+
+@tool
+def parameter_discovery(url: str) -> str:
+    """Discovers potential hidden parameters for a URL by fuzzing common GET parameters."""
+    common_params = ['id', 'user', 'admin', 'redirect', 'file', 'dir', 'page', 'token', 'debug', 'test']
+    found_params = []
+    
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        # Baseline response length
+        baseline_resp = requests.get(url, headers=headers, timeout=5)
+        baseline_len = len(baseline_resp.text)
+        
+        # Fuzz standard parameters with a dummy value
+        for param in common_params:
+            test_url = f"{url}?{param}=1"
+            try:
+                test_resp = requests.get(test_url, headers=headers, timeout=3)
+                # If the length of the response changes significantly, the parameter might be reflected or processed
+                if abs(len(test_resp.text) - baseline_len) > 50 or test_resp.status_code != baseline_resp.status_code:
+                    found_params.append(f"{param} (Changes response length or status: {test_resp.status_code})")
+            except requests.RequestException:
+                continue
+                
+        output = f"Parameter Discovery for {url}:\n"
+        if found_params:
+             output += "Potential active parameters discovered (response changed):\n"
+             for p in found_params:
+                  output += f"- {p}\n"
+             output += "\nThese may lead to SQLi, XSS, or IDOR vulnerabilities.\n"
+        else:
+             output += "No obvious active parameters found from the quick scan list.\n"
+             
+        # Find parameters already in the DOM (forms)
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(baseline_resp.text, 'html.parser')
+        form_params = set()
+        for form in soup.find_all('input'):
+             name = form.get('name')
+             if name:
+                  form_params.add(name)
+                  
+        if form_params:
+             output += f"Parameters found in HTML forms: {', '.join(form_params)}\n"
+             
+        return output
+    except Exception as e:
+        return f"Error performing parameter discovery on {url}: {e}"

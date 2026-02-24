@@ -2,7 +2,7 @@ from typing import TypedDict, Annotated
 import operator
 from langgraph.graph import StateGraph, START, END
 from crewai import Task, Crew
-from src.agents.recon_agents import web_recon_specialist, osint_analyst, vulnerability_analyst, subdomain_analyst
+from src.agents.recon_agents import web_recon_specialist, osint_analyst, vulnerability_analyst, subdomain_analyst, live_host_analyst, js_recon_analyst, parameter_discovery_analyst
 import logging
 
 # Set up simple logging
@@ -15,6 +15,9 @@ class ReconState(TypedDict):
     osint_results: str
     vulnerability_results: str
     subdomain_results: str
+    live_host_results: str
+    js_recon_results: str
+    parameter_results: str
     final_report: dict
     errors: Annotated[list[str], operator.add]
 
@@ -83,14 +86,68 @@ def run_subdomain_recon(state: ReconState):
           logging.error(error_msg)
           return {"errors": [error_msg]}
 
+def run_compile_report_placeholder():
+     pass
+
+def run_live_host(state: ReconState):
+     logging.info(f"Starting Live Host Check on {state['target']}")
+     try:
+          task = Task(
+               description=f"Perform live host checking on {state['target']} to see if services respond directly.",
+               expected_output="A summary of live services.",
+               agent=live_host_analyst
+          )
+          crew = Crew(agents=[live_host_analyst], tasks=[task], verbose=False)
+          result = crew.kickoff()
+          return {"live_host_results": str(result.raw)}
+     except Exception as e:
+          error_msg = f"Live Host Check Error: {e}"
+          logging.error(error_msg)
+          return {"errors": [error_msg]}
+
+def run_js_recon(state: ReconState):
+     logging.info(f"Starting JS Recon on {state['target']}")
+     try:
+          task = Task(
+               description=f"Analyze JavaScript files on {state['target']} to uncover hidden endpoints and API keys.",
+               expected_output="A summary of JavaScript reconnaissance findings.",
+               agent=js_recon_analyst
+          )
+          crew = Crew(agents=[js_recon_analyst], tasks=[task], verbose=False)
+          result = crew.kickoff()
+          return {"js_recon_results": str(result.raw)}
+     except Exception as e:
+          error_msg = f"JS Recon Error: {e}"
+          logging.error(error_msg)
+          return {"errors": [error_msg]}
+
+def run_parameter_discovery(state: ReconState):
+     logging.info(f"Starting Parameter Discovery on {state['target']}")
+     try:
+          task = Task(
+               description=f"Discover hidden GET/POST parameters on {state['target']} that could lead to injection or IDOR.",
+               expected_output="A summary of discovered parameters.",
+               agent=parameter_discovery_analyst
+          )
+          crew = Crew(agents=[parameter_discovery_analyst], tasks=[task], verbose=False)
+          result = crew.kickoff()
+          return {"parameter_results": str(result.raw)}
+     except Exception as e:
+          error_msg = f"Parameter Discovery Error: {e}"
+          logging.error(error_msg)
+          return {"errors": [error_msg]}
+
 def compile_report(state: ReconState):
     logging.info("Compiling final report...")
     report = {
         "Target": state["target"],
+        "Live_Host_Checking": state.get("live_host_results", "Data not available or errored out."),
         "Web_Reconnaissance": state.get("web_recon_results", "Data not available or errored out."),
         "OSINT_Intelligence": state.get("osint_results", "Data not available or errored out."),
         "Subdomain_Reconnaissance": state.get("subdomain_results", "Data not available or errored out."),
         "Vulnerability_Assessment": state.get("vulnerability_results", "Data not available or errored out."),
+        "JavaScript_Reconnaissance": state.get("js_recon_results", "Data not available or errored out."),
+        "Parameter_Discovery": state.get("parameter_results", "Data not available or errored out."),
         "Errors": state.get("errors", [])
     }
     return {"final_report": report}
@@ -102,6 +159,9 @@ workflow.add_node("web_recon", run_web_recon)
 workflow.add_node("osint", run_osint)
 workflow.add_node("vuln_scan", run_vulnerability_scan)
 workflow.add_node("subdomain_recon", run_subdomain_recon)
+workflow.add_node("live_host", run_live_host)
+workflow.add_node("js_recon", run_js_recon)
+workflow.add_node("parameter_recon", run_parameter_discovery)
 workflow.add_node("compile_report", compile_report)
 
 # Define edges (Parallel flow)
@@ -109,8 +169,11 @@ workflow.add_edge(START, "web_recon")
 workflow.add_edge(START, "osint")
 workflow.add_edge(START, "vuln_scan")
 workflow.add_edge(START, "subdomain_recon")
+workflow.add_edge(START, "live_host")
+workflow.add_edge(START, "js_recon")
+workflow.add_edge(START, "parameter_recon")
 
-workflow.add_edge(["web_recon", "osint", "vuln_scan", "subdomain_recon"], "compile_report")
+workflow.add_edge(["web_recon", "osint", "vuln_scan", "subdomain_recon", "live_host", "js_recon", "parameter_recon"], "compile_report")
 workflow.add_edge("compile_report", END)
 
 # Compile
