@@ -13,3 +13,4 @@ __pycache__/
 
 # Generated reports
 src/reports/.venv/
+.venv/
