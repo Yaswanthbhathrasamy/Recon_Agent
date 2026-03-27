@@ -1,0 +1,6 @@
+{
+  "provider": "ollama",
+  "model": "codeguru:latest",
+  "api_key": "",
+  "updated_at": "2026-03-27T07:50:16.587535+00:00"
+}

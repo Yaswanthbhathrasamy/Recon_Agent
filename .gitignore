@@ -12,4 +12,4 @@ __pycache__/
 *.pyc
 
 # Generated reports
-src/reports/
+src/reports/.venv/

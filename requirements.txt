@@ -13,3 +13,9 @@ shodan
 python-Wappalyzer
 fpdf2
 requests
+fastapi
+uvicorn
+httpx
+redis
+pydantic
+rich
