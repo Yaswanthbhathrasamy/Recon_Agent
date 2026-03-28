@@ -51,7 +51,7 @@ _BANNER = r"""
   ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║   ╚════██║
   ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║   ███████║
   ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝   ╚══════╝[/bright_cyan]
-  [dim bright_red]◤ Autonomous Offensive Reconnaissance Engine ◢[/dim bright_red]
+  [dim bright_red]◤ Autonomous Offensive Reconnaissance Engine [v2.0][/dim bright_red]
   [dim]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/dim]
   [bright_magenta]                              dev by yashh[/bright_magenta]
 """
