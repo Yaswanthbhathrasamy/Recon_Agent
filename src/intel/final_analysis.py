@@ -5,18 +5,24 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Tuple
 
 from src.core.schemas import (
+    AgentStep,
+    AttackPath,
     AttackSurfaceSection,
     CorrelationEntry,
     FindingEvidence,
     FullFinding,
     FullScanOutput,
+    IntelligenceSection,
     LLMMeta,
     PortEntry,
     ReconSection,
     ScanMeta,
     ScanSummary,
     SeverityCount,
+    SeverityReview,
 )
+from src.llm import enrich_insights
+from src.llm.base import LLMClient
 
 
 SEVERITY_ORDER = {"low": 1, "medium": 2, "high": 3, "critical": 4}
@@ -46,6 +52,12 @@ _RECOMMENDATION_MAP = {
 
 def _severity_max(a: str, b: str) -> str:
     return a if SEVERITY_ORDER.get(a, 0) >= SEVERITY_ORDER.get(b, 0) else b
+
+
+def _coerce_severity(value: Any, default: str = "medium") -> str:
+    """Map arbitrary LLM-supplied severity text onto a valid enum value."""
+    sev = str(value or "").strip().lower()
+    return sev if sev in SEVERITY_ORDER else default
 
 
 def _finding_id(category: str, endpoint: str, desc: str) -> str:
@@ -175,8 +187,11 @@ def finalize_security_insights(
     scan_type: str = "fast",
     provider: str = "openai",
     model: str = "gpt-4o",
+    llm_client: "LLMClient | None" = None,
+    agent_trace: List[Dict[str, Any]] | None = None,
 ) -> Dict[str, Any]:
     errors = errors or []
+    agent_trace = agent_trace or []
 
     # ── Build meta ────────────────────────────────────────────────────
     meta = ScanMeta(
@@ -284,6 +299,48 @@ def finalize_security_insights(
         risk_score=_compute_risk_score(sev_count),
     )
 
+    # ── LLM intelligence (executive summary, attack paths, severity review) ──
+    # Deterministic engine still owns the findings above; the LLM adds narrative
+    # and multi-step attack synthesis. Falls back cleanly when no model is set.
+    intel_context = {
+        "target": target,
+        "recon": recon.model_dump(),
+        "attack_surface": attack_surface.model_dump(),
+    }
+    intel_raw = enrich_insights(llm_client, intel_context, [f.model_dump() for f in findings])
+    intelligence = IntelligenceSection(
+        engine=str(intel_raw.get("engine", "deterministic")),
+        executive_summary=str(intel_raw.get("executive_summary", "")),
+        attack_paths=[
+            AttackPath(
+                title=str(ap.get("title", "")),
+                severity=_coerce_severity(ap.get("severity")),
+                steps=[str(s) for s in ap.get("steps", [])],
+                related_signals=[str(s) for s in ap.get("related_signals", [])],
+            )
+            for ap in intel_raw.get("attack_paths", [])
+            if isinstance(ap, dict) and ap.get("title")
+        ],
+        severity_reviews=[
+            SeverityReview(
+                finding_id=str(sr.get("finding_id", "")),
+                suggested_severity=_coerce_severity(sr.get("suggested_severity")),
+                reason=str(sr.get("reason", "")),
+            )
+            for sr in intel_raw.get("severity_reviews", [])
+            if isinstance(sr, dict) and sr.get("finding_id")
+        ],
+    )
+
+    # ── Agent trace (autonomous mode) ─────────────────────────────────
+    trace_models: List[AgentStep] = []
+    for st in agent_trace:
+        if isinstance(st, dict):
+            try:
+                trace_models.append(AgentStep(**st))
+            except Exception:
+                continue
+
     # ── Assemble output ───────────────────────────────────────────────
     output = FullScanOutput(
         meta=meta,
@@ -291,6 +348,10 @@ def finalize_security_insights(
         attack_surface=attack_surface,
         findings=findings,
         correlation=correlations,
+        intelligence=intelligence,
+        agent_trace=trace_models,
         summary=summary,
     )
     return output.model_dump()
+
+

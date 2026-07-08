@@ -1,8 +1,10 @@
-# Virtual environment
+# Virtual environments
 venv/
+.venv/
 
-# Environment variables
+# Environment variables & secrets
 .env
+.recon_llm_config.json
 
 # VS Code
 .vscode/
@@ -11,8 +13,6 @@ venv/
 __pycache__/
 *.pyc
 
-# Generated reports
-src/reports/.venv/
-.venv/
-.venv/
-.venv/
+# Generated scan reports
+src/reports/*.json
+src/reports/*.pdf

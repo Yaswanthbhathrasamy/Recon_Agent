@@ -13,8 +13,32 @@ import requests
 import urllib3
 from bs4 import BeautifulSoup
 
+from src.attacks import Probe, discover_api, probe_api, requests_fetch, run_surface_attacks
 from src.core.schemas import Finding, TaskPayload, TaskResult
 from src.tooling.recon_wrappers import ReconToolbox
+
+
+# Per-task request budgets keep active testing bounded and non-abusive.
+_FAST_BUDGET = 150
+_DEEP_BUDGET = 500
+_DEFAULT_PARAMS = ["id", "q", "search", "page", "user", "name", "file", "redirect", "next", "url"]
+
+
+def _finding_dicts_to_models(dicts: List[Dict[str, Any]]) -> List[Finding]:
+    models: List[Finding] = []
+    for d in dicts:
+        try:
+            models.append(Finding(**d))
+        except Exception:
+            continue
+    return models
+
+
+def _top_severity(findings: List[Finding]) -> str:
+    for level in ("critical", "high", "medium"):
+        if any(f.severity == level for f in findings):
+            return level
+    return "low"
 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -53,6 +77,10 @@ class WorkerEngine:
                 "header_analysis": self._header_analysis,
                 "sensitive_file_detection": self._sensitive_file_detection,
                 "vuln_pattern_detection": self._vuln_pattern_detection,
+                "sqli_testing": self._sqli_testing,
+                "xss_testing": self._xss_testing,
+                "api_discovery": self._api_discovery,
+                "api_attack_surface": self._api_attack_surface,
                 "finding_validation": self._finding_validation,
                 "correlation_analysis": self._correlation_analysis,
                 "final_intelligence": self._final_intelligence,
@@ -648,6 +676,112 @@ class WorkerEngine:
             "severity": top_sev,
             "summary": f"Nuclei scan found {len(findings)} vulnerability patterns",
             "data": res,
+            "findings": findings,
+        }
+
+    # ── Active surface-attack + API agents ────────────────────────────
+    def _budget(self, task: TaskPayload) -> int:
+        return _DEEP_BUDGET if task.scan_type == "deep" else _FAST_BUDGET
+
+    def _make_probe(self, task: TaskPayload) -> Probe:
+        timeout = min(task.timeout_seconds, 15)
+        return Probe(fetch=requests_fetch(timeout=timeout), max_requests=self._budget(task))
+
+    def _attack_targets(self, task: TaskPayload) -> tuple[List[str], List[str]]:
+        """Resolve (params, endpoint_urls) to test, honouring LLM focus hints."""
+        base = _normalize_target_url(task.target)
+        meta = task.metadata or {}
+        focus = meta.get("attack_focus", {}) or {}
+
+        params = list(focus.get("params") or meta.get("parameters") or [])
+        if not params:
+            params = list(_DEFAULT_PARAMS)
+
+        # Build concrete URLs from crawled endpoints (cap to stay bounded).
+        raw_eps = list(focus.get("endpoints") or meta.get("endpoints") or [])
+        urls = [base]
+        for ep in raw_eps:
+            ep = str(ep)
+            if ep.startswith("http"):
+                urls.append(ep)
+            elif ep.startswith("/"):
+                urls.append(base.rstrip("/") + ep)
+        # Dedupe, keep order, cap.
+        seen: set[str] = set()
+        deduped = [u for u in urls if not (u in seen or seen.add(u))]
+        return params[:15], deduped[:12]
+
+    async def _sqli_testing(self, task: TaskPayload) -> Dict:
+        """SQL Injection Agent — error-based and boolean-based detection."""
+        probe = self._make_probe(task)
+        params, urls = self._attack_targets(task)
+        raw: List[Dict[str, Any]] = []
+        for url in urls:
+            raw += run_surface_attacks(probe, url, params, categories=["Injection"])
+            if probe.budget_hit:
+                break
+        findings = _finding_dicts_to_models(raw)
+        return {
+            "severity": _top_severity(findings),
+            "summary": f"SQLi testing: {len(findings)} finding(s) over {len(urls)} url(s), {probe.sent} requests",
+            "data": {"tested_urls": urls, "tested_params": params, "requests_sent": probe.sent},
+            "findings": findings,
+        }
+
+    async def _xss_testing(self, task: TaskPayload) -> Dict:
+        """XSS Agent — reflected cross-site scripting and open-redirect detection."""
+        probe = self._make_probe(task)
+        params, urls = self._attack_targets(task)
+        raw: List[Dict[str, Any]] = []
+        for url in urls:
+            raw += run_surface_attacks(probe, url, params, categories=["XSS", "Web Attacks"])
+            if probe.budget_hit:
+                break
+        findings = _finding_dicts_to_models(raw)
+        return {
+            "severity": _top_severity(findings),
+            "summary": f"XSS/redirect testing: {len(findings)} finding(s), {probe.sent} requests",
+            "data": {"tested_urls": urls, "tested_params": params, "requests_sent": probe.sent},
+            "findings": findings,
+        }
+
+    async def _api_discovery(self, task: TaskPayload) -> Dict:
+        """API Recon Agent — OpenAPI/Swagger + GraphQL discovery."""
+        probe = self._make_probe(task)
+        base = _normalize_target_url(task.target)
+        result = discover_api(probe, base)
+        findings = _finding_dicts_to_models(result.get("findings", []))
+        return {
+            "severity": _top_severity(findings),
+            "summary": (
+                f"API discovery: {len(result.get('endpoints', []))} spec endpoint(s), "
+                f"{len(result.get('graphql_endpoints', []))} GraphQL, {len(result.get('api_roots', []))} REST root(s)"
+            ),
+            "data": {
+                "endpoints": result.get("endpoints", []),
+                "spec_urls": result.get("spec_urls", []),
+                "api_roots": result.get("api_roots", []),
+                "graphql_endpoints": result.get("graphql_endpoints", []),
+                "requests_sent": probe.sent,
+            },
+            "findings": findings,
+        }
+
+    async def _api_attack_surface(self, task: TaskPayload) -> Dict:
+        """API Attack Agent — broken-auth, BOLA/IDOR, and API injection probing."""
+        probe = self._make_probe(task)
+        base = _normalize_target_url(task.target)
+        meta = task.metadata or {}
+        # Prefer endpoints discovered by the API recon agent (piped via metadata).
+        endpoints = list(meta.get("api_endpoints") or [])
+        if not endpoints:
+            discovered = discover_api(probe, base)
+            endpoints = discovered.get("endpoints", [])
+        findings = _finding_dicts_to_models(probe_api(probe, base, endpoints[:25]))
+        return {
+            "severity": _top_severity(findings),
+            "summary": f"API attack surface: {len(findings)} finding(s) over {len(endpoints)} endpoint(s), {probe.sent} requests",
+            "data": {"tested_endpoints": endpoints[:25], "requests_sent": probe.sent},
             "findings": findings,
         }
 

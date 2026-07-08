@@ -4,6 +4,7 @@ langgraph
 langchain-openai
 langchain-community
 langsmith
+anthropic
 python-dotenv
 python-whois
 beautifulsoup4

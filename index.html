@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Recon Agents | Autonomous Offensive Recon Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+
+  <style>
+    :root {
+      --bg-0: #050911;
+      --bg-1: #0a1220;
+      --bg-2: #101b2f;
+      --panel: rgba(255, 255, 255, 0.05);
+      --panel-2: rgba(255, 255, 255, 0.03);
+      --line: rgba(130, 190, 255, 0.24);
+      --line-2: rgba(141, 255, 195, 0.2);
+      --ink: #ecf3ff;
+      --muted: #9eb4d7;
+      --cyan: #2de4ff;
+      --green: #8cff60;
+      --orange: #ff9a4a;
+      --danger: #ff5f66;
+      --shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
+      --radius: 18px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      min-height: 100vh;
+      font-family: "Space Grotesk", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at 8% 12%, rgba(39, 94, 175, 0.26) 0%, transparent 42%),
+                  radial-gradient(circle at 86% 10%, rgba(30, 130, 92, 0.25) 0%, transparent 35%),
+                  linear-gradient(145deg, var(--bg-0), var(--bg-1) 46%, var(--bg-2));
+      overflow-x: hidden;
+    }
+
+    .grid-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      opacity: 0.2;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+      background-size: 34px 34px;
+      animation: gridShift 24s linear infinite;
+    }
+
+    .noise-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      opacity: 0.06;
+      pointer-events: none;
+      background-image: radial-gradient(circle at 20% 20%, #ffffff 1px, transparent 1px);
+      background-size: 3px 3px;
+    }
+
+    .neon-blobs::before,
+    .neon-blobs::after {
+      content: "";
+      position: fixed;
+      width: 460px;
+      height: 460px;
+      border-radius: 50%;
+      filter: blur(64px);
+      opacity: 0.16;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .neon-blobs::before {
+      background: #11d3ff;
+      top: -130px;
+      right: -120px;
+      animation: floatBlob 10s ease-in-out infinite;
+    }
+
+    .neon-blobs::after {
+      background: #7eff53;
+      left: -120px;
+      bottom: -120px;
+      animation: floatBlob 12s ease-in-out infinite reverse;
+    }
+
+    @keyframes floatBlob {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(14px) scale(1.08); }
+    }
+
+    @keyframes gridShift {
+      from { transform: translate(0, 0); }
+      to { transform: translate(34px, 34px); }
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      width: min(1160px, 92vw);
+      margin: 0 auto;
+      padding: 38px 0 84px;
+    }
+
+    .section {
+      margin-top: 28px;
+      opacity: 0;
+      transform: translateY(18px);
+    }
+
+    .section.visible {
+      animation: sectionReveal 0.7s ease forwards;
+    }
+
+    @keyframes sectionReveal {
+      from {
+        opacity: 0;
+        transform: translateY(18px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      background: linear-gradient(170deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(9px);
+      overflow: hidden;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 18px;
+      padding: 28px;
+      position: relative;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(110deg, transparent 30%, rgba(45, 228, 255, 0.08) 50%, transparent 70%);
+      transform: translateX(-120%);
+      animation: heroSweep 6s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    @keyframes heroSweep {
+      0% { transform: translateX(-120%); }
+      45%, 100% { transform: translateX(120%); }
+    }
+
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--green);
+      margin-bottom: 10px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 12px var(--green);
+      animation: dotPulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes dotPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    h1 {
+      font-family: "Orbitron", sans-serif;
+      font-size: clamp(1.9rem, 5.5vw, 3.35rem);
+      letter-spacing: 0.05em;
+      line-height: 1.05;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      max-width: 680px;
+      color: var(--muted);
+      line-height: 1.62;
+      font-size: clamp(0.95rem, 1.8vw, 1.06rem);
+    }
+
+    .hero-meta {
+      margin-top: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .status-pill {
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 0.78rem;
+      color: #e9f4ff;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .status-pill strong {
+      color: var(--green);
+    }
+
+    .hero-cta {
+      margin-top: 18px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .btn {
+      text-decoration: none;
+      border-radius: 12px;
+      padding: 11px 14px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      font-size: 0.88rem;
+      transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+      border: 1px solid transparent;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 140px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #18d7ff, #59ff9d);
+      color: #001219;
+      box-shadow: 0 8px 24px rgba(45, 228, 255, 0.26);
+    }
+
+    .btn-secondary {
+      color: #dff2ff;
+      border-color: var(--line);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .btn-tertiary {
+      color: #ffeede;
+      border-color: rgba(255, 154, 74, 0.42);
+      background: rgba(255, 154, 74, 0.12);
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 22px rgba(0, 0, 0, 0.32);
+    }
+
+    .hero-terminal {
+      border: 1px solid var(--line-2);
+      border-radius: 14px;
+      background: #04080f;
+      padding: 14px;
+      position: relative;
+      min-height: 230px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    }
+
+    .terminal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      color: #94abcf;
+      font-size: 0.78rem;
+    }
+
+    .terminal-dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .terminal-dots span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .terminal-dots span:nth-child(1) { background: #ff656e; }
+    .terminal-dots span:nth-child(2) { background: #ffcc55; }
+    .terminal-dots span:nth-child(3) { background: #76ff8d; }
+
+    .term-lines {
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 0.86rem;
+      line-height: 1.6;
+      color: #d5e6ff;
+      min-height: 174px;
+    }
+
+    .term-line {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+
+    .term-line.visible {
+      animation: lineReveal 0.34s ease forwards;
+    }
+
+    @keyframes lineReveal {
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .prompt {
+      color: var(--green);
+      margin-right: 8px;
+    }
+
+    .cursor {
+      display: inline-block;
+      width: 8px;
+      height: 1.02em;
+      background: var(--green);
+      vertical-align: middle;
+      margin-left: 5px;
+      animation: cursorBlink 1.05s steps(1, end) infinite;
+    }
+
+    @keyframes cursorBlink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    .scanline {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, rgba(45, 228, 255, 0.82), transparent);
+      animation: scanner 3.8s linear infinite;
+      opacity: 0.7;
+      pointer-events: none;
+    }
+
+    @keyframes scanner {
+      0% { top: 12%; }
+      100% { top: 88%; }
+    }
+
+    .section-head {
+      margin-bottom: 12px;
+    }
+
+    .section-kicker {
+      font-size: 0.74rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--green);
+      margin-bottom: 7px;
+    }
+
+    .section-title {
+      font-family: "Orbitron", sans-serif;
+      font-size: clamp(1.15rem, 2.2vw, 1.45rem);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #f2f7ff;
+      margin-bottom: 8px;
+    }
+
+    .section-desc {
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .feedback-wrap {
+      padding: 22px;
+    }
+
+    .feedback-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .log-card {
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: linear-gradient(170deg, rgba(0, 6, 15, 0.9), rgba(6, 16, 30, 0.88));
+      padding: 14px;
+      min-height: 180px;
+      opacity: 0;
+      transform: translateY(16px);
+      transition: border-color 0.24s ease, box-shadow 0.24s ease;
+      overflow: hidden;
+    }
+
+    .log-card::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(45, 228, 255, 0.08), transparent 36%);
+      pointer-events: none;
+    }
+
+    .log-card.visible {
+      animation: sectionReveal 0.55s ease forwards;
+    }
+
+    .log-card:hover {
+      border-color: rgba(45, 228, 255, 0.55);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(45, 228, 255, 0.25) inset;
+    }
+
+    .log-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .log-role {
+      font-family: "Orbitron", sans-serif;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #eaf4ff;
+    }
+
+    .tag {
+      font-size: 0.68rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      padding: 4px 7px;
+      border-radius: 999px;
+      color: #dce8ff;
+      background: rgba(255, 255, 255, 0.08);
+      white-space: nowrap;
+    }
+
+    .tag.signal { border-color: rgba(140, 255, 96, 0.5); color: #cfffbb; }
+    .tag.noise { border-color: rgba(45, 228, 255, 0.45); color: #b8f3ff; }
+    .tag.arch { border-color: rgba(255, 154, 74, 0.52); color: #ffd9b8; }
+
+    .log-text {
+      color: #d8e8ff;
+      line-height: 1.56;
+      font-size: 0.93rem;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .how-wrap,
+    .arch-wrap,
+    .feature-wrap,
+    .terminal-wrap,
+    .stack-wrap,
+    .about-wrap {
+      padding: 22px;
+    }
+
+    .pipeline {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 9px;
+      margin-top: 14px;
+    }
+
+    .step {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 10px;
+      background: var(--panel-2);
+      position: relative;
+      min-height: 100px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      gap: 6px;
+    }
+
+    .step-btn {
+      cursor: pointer;
+      transition: border-color 0.24s ease, box-shadow 0.24s ease, transform 0.24s ease;
+    }
+
+    .step-btn:hover,
+    .step-btn.active {
+      border-color: rgba(45, 228, 255, 0.64);
+      box-shadow: 0 0 0 1px rgba(45, 228, 255, 0.25) inset, 0 10px 24px rgba(0, 0, 0, 0.32);
+      transform: translateY(-2px);
+    }
+
+    .step .index {
+      color: var(--green);
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+    }
+
+    .step .name {
+      font-family: "Orbitron", sans-serif;
+      font-size: 0.82rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #e8f2ff;
+    }
+
+    .step::after {
+      content: ">";
+      position: absolute;
+      right: -9px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--cyan);
+      font-weight: 700;
+      font-size: 1rem;
+    }
+
+    .step:last-child::after {
+      content: "";
+    }
+
+    .agents-grid {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .agent {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 8px;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 0.76rem;
+      color: #daebff;
+      transition: transform 0.2s ease, border-color 0.2s ease;
+    }
+
+    .agent-btn {
+      cursor: pointer;
+    }
+
+    .agent:hover,
+    .agent.active {
+      transform: translateY(-2px);
+      border-color: rgba(45, 228, 255, 0.58);
+      box-shadow: 0 0 0 1px rgba(45, 228, 255, 0.26) inset;
+    }
+
+    .output-card {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      background: linear-gradient(160deg, rgba(5, 12, 24, 0.9), rgba(8, 18, 34, 0.9));
+      min-height: 104px;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+    }
+
+    .output-card.show {
+      opacity: 1;
+      transform: translateY(0);
+      border-color: rgba(45, 228, 255, 0.55);
+    }
+
+    .output-label {
+      font-family: "Orbitron", sans-serif;
+      font-size: 0.8rem;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: var(--green);
+      margin-bottom: 8px;
+    }
+
+    .output-title {
+      font-size: 0.98rem;
+      color: #edf4ff;
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+
+    .output-text {
+      font-size: 0.92rem;
+      line-height: 1.55;
+      color: #cfe0fa;
+    }
+
+    .phase {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .phase span {
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border-radius: 999px;
+      padding: 6px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .phase .parallel { color: #b8f9c7; border-color: rgba(140, 255, 96, 0.42); }
+    .phase .sequential { color: #bfeeff; border-color: rgba(45, 228, 255, 0.42); }
+
+    .feature-grid {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .feature {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      background: var(--panel);
+      min-height: 124px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .feature:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.33);
+    }
+
+    .feature .icon {
+      font-size: 1.25rem;
+      margin-bottom: 8px;
+      color: var(--cyan);
+    }
+
+    .feature h3 {
+      font-family: "Orbitron", sans-serif;
+      font-size: 0.84rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      color: #edf4ff;
+    }
+
+    .feature p {
+      color: var(--muted);
+      line-height: 1.5;
+      font-size: 0.91rem;
+    }
+
+    .live-terminal {
+      margin-top: 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #04070e;
+      padding: 14px;
+      min-height: 212px;
+      position: relative;
+    }
+
+    .live-lines {
+      font-size: 0.9rem;
+      line-height: 1.56;
+      color: #d4e8ff;
+      min-height: 168px;
+    }
+
+    .stack-pills {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .stack-pill {
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 999px;
+      padding: 7px 11px;
+      background: rgba(255, 255, 255, 0.05);
+      font-size: 0.8rem;
+      color: #e8f4ff;
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .stack-pill:hover {
+      border-color: rgba(45, 228, 255, 0.55);
+      transform: translateY(-2px);
+    }
+
+    .about-wrap p {
+      color: #d7e9ff;
+      line-height: 1.62;
+      margin-top: 8px;
+    }
+
+    .cta-wrap {
+      padding: 24px;
+      border-color: rgba(45, 228, 255, 0.4);
+      box-shadow: var(--shadow), 0 0 0 1px rgba(45, 228, 255, 0.2) inset;
+    }
+
+    .cta-actions {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .cta-email {
+      margin-top: 12px;
+      color: #d7ebff;
+      font-size: 0.95rem;
+    }
+
+    .cta-email a {
+      color: var(--cyan);
+      text-decoration: none;
+      border-bottom: 1px dashed rgba(45, 228, 255, 0.55);
+    }
+
+    .btn.glow:hover {
+      box-shadow: 0 0 0 1px rgba(45, 228, 255, 0.35) inset, 0 0 26px rgba(45, 228, 255, 0.34), 0 10px 24px rgba(0, 0, 0, 0.32);
+    }
+
+    .about-wrap strong {
+      color: var(--orange);
+      font-size: 1.05rem;
+    }
+
+    .footer {
+      margin-top: 24px;
+      text-align: center;
+      color: #92a9cd;
+      font-size: 0.84rem;
+      letter-spacing: 0.03em;
+    }
+
+    @media (max-width: 1040px) {
+      .hero {
+        grid-template-columns: 1fr;
+      }
+
+      .feedback-grid,
+      .grid-2,
+      .feature-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .pipeline {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .step::after {
+        display: none;
+      }
+
+      .agents-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 620px) {
+      .container {
+        width: min(1160px, 94vw);
+        padding-top: 22px;
+      }
+
+      .hero,
+      .feedback-wrap,
+      .how-wrap,
+      .arch-wrap,
+      .feature-wrap,
+      .terminal-wrap,
+      .stack-wrap,
+      .about-wrap {
+        padding: 16px;
+      }
+
+      .hero-cta .btn {
+        width: 100%;
+      }
+
+      .cta-actions .btn {
+        width: 100%;
+      }
+
+      .pipeline {
+        grid-template-columns: 1fr;
+      }
+
+      .agents-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="grid-overlay"></div>
+  <div class="noise-overlay"></div>
+  <div class="neon-blobs"></div>
+
+  <main class="container">
+    <!-- Hero Section -->
+    <section class="section visible">
+      <header class="panel hero">
+        <div>
+          <div class="kicker"><span class="dot"></span> Autonomous Offensive Reconnaissance Engine</div>
+          <h1 id="heroTitle"></h1>
+          <p class="subtitle">
+            Recon Agents is a 14-agent distributed cybersecurity platform for reconnaissance,
+            evidence-driven validation, attack-path correlation, and LLM-powered final intelligence.
+            Built to maximize signal and minimize noise.
+          </p>
+
+          <div class="hero-meta">
+            <span class="status-pill"><strong>LIVE</strong> telemetry streaming</span>
+            <span class="status-pill"><strong>AGENTS ACTIVE</strong> 14/14 operational</span>
+            <span class="status-pill"><strong>SCAN READY</strong> fast + deep modes</span>
+          </div>
+
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="https://github.com/Yaswanthbhathrasamy/Recon_Agent" target="_blank" rel="noreferrer">View on GitHub</a>
+            <a class="btn btn-secondary" href="https://github.com/Yaswanthbhathrasamy" target="_blank" rel="noreferrer">GitHub Profile</a>
+            <a class="btn btn-tertiary" href="https://www.linkedin.com/in/yaswanth-b-b21334283/" target="_blank" rel="noreferrer">Hire Me / Contact</a>
+          </div>
+        </div>
+
+        <aside class="hero-terminal">
+          <div class="terminal-head">
+            <span>Recon Console v2.0</span>
+            <div class="terminal-dots"><span></span><span></span><span></span></div>
+          </div>
+          <div class="scanline"></div>
+          <div id="heroTerminal" class="term-lines"></div>
+        </aside>
+      </header>
+    </section>
+
+    <!-- Security Analyst Logs -->
+    <section class="section reveal-section">
+      <div class="panel feedback-wrap">
+        <div class="section-head">
+          <p class="section-kicker">Peer Validation</p>
+          <h2 class="section-title">Security Analyst Logs</h2>
+          <p class="section-desc">Expert-style feedback represented as structured review snippets.</p>
+        </div>
+
+        <div class="feedback-grid">
+          <article class="log-card reveal-item">
+            <div class="log-top">
+              <span class="log-role">Senior Security Researcher Style</span>
+              <span class="tag signal">High Signal</span>
+            </div>
+            <p class="log-text">This is impressive work. The validation + correlation layer is what most recon tools lack - reducing false positives is a huge win. Curious how you are handling edge cases in JS endpoint extraction and dynamic parameters.</p>
+          </article>
+
+          <article class="log-card reveal-item">
+            <div class="log-top">
+              <span class="log-role">AppSec Engineer (Company)</span>
+              <span class="tag arch">Architecture Review</span>
+            </div>
+            <p class="log-text">Solid architecture. The phased execution with parallel recon and sequential validation is very well thought out. The 86% accuracy metric after pruning is particularly interesting - benchmarking details would be great to review.</p>
+          </article>
+
+          <article class="log-card reveal-item">
+            <div class="log-top">
+              <span class="log-role">Security Architect Feedback</span>
+              <span class="tag arch">Architecture Review</span>
+            </div>
+            <p class="log-text">The dual-layer design (LangGraph + distributed agents) is a strong approach. Separation of orchestration and execution makes it scalable. Evidence-driven findings are a strong quality marker.</p>
+          </article>
+
+          <article class="log-card reveal-item">
+            <div class="log-top">
+              <span class="log-role">Bug Bounty Hunter Style</span>
+              <span class="tag noise">Low Noise</span>
+            </div>
+            <p class="log-text">If the validation engine really cuts down noise, this could be a game changer. Most tools flood with low-quality findings - signal over noise is everything.</p>
+          </article>
+
+          <article class="log-card reveal-item">
+            <div class="log-top">
+              <span class="log-role">AI Security Researcher</span>
+              <span class="tag signal">High Signal</span>
+            </div>
+            <p class="log-text">Using LLM for classification and prioritization instead of raw scanning is the right direction. AI is strongest for decision support and intelligence summarization.</p>
+          </article>
+
+          <article class="log-card reveal-item">
+            <div class="log-top">
+              <span class="log-role">Startup / Product Mindset</span>
+              <span class="tag noise">Low Noise</span>
+            </div>
+            <p class="log-text">This feels like a product, not just a script. CLI UX, structured output, distributed mode, and validation logic make it practical for real-world offensive workflows.</p>
+          </article>
+
+          <article class="log-card reveal-item">
+            <div class="log-top">
+              <span class="log-role">Recruiter + Tech Hybrid</span>
+              <span class="tag signal">High Signal</span>
+            </div>
+            <p class="log-text">Strong project depth across security engineering, distributed systems, and applied AI. This profile maps directly to advanced offensive security and AppSec R&D roles.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section reveal-section grid-2">
+      <!-- Flow - How It Works (Interactive) -->
+      <article class="panel how-wrap">
+        <div class="section-head">
+          <p class="section-kicker">Flow</p>
+          <h2 class="section-title">Flow - How It Works</h2>
+          <p class="section-desc">Input to intelligence through a deterministic multi-stage pipeline.</p>
+        </div>
+
+        <div class="pipeline">
+          <button class="step step-btn" type="button" data-step="1"><span class="index">Step 01</span><span class="name">Input</span></button>
+          <button class="step step-btn" type="button" data-step="2"><span class="index">Step 02</span><span class="name">Recon Agents</span></button>
+          <button class="step step-btn" type="button" data-step="3"><span class="index">Step 03</span><span class="name">Validation</span></button>
+          <button class="step step-btn" type="button" data-step="4"><span class="index">Step 04</span><span class="name">Correlation</span></button>
+          <button class="step step-btn" type="button" data-step="5"><span class="index">Step 05</span><span class="name">Intelligence</span></button>
+        </div>
+
+        <div id="flowOutput" class="output-card show" aria-live="polite">
+          <p class="output-label">Flow Output</p>
+          <p class="output-title">Step 01: Input</p>
+          <p class="output-text">User provides target domain and selects scan mode (Recon / Attack).</p>
+        </div>
+      </article>
+
+      <!-- Architecture - 14 Agent Topology (Interactive) -->
+      <article class="panel arch-wrap">
+        <div class="section-head">
+          <p class="section-kicker">Execution Model</p>
+          <h2 class="section-title">Architecture - 14 Agent Topology</h2>
+          <p class="section-desc">14-agent topology with parallel discovery and sequential confidence hardening.</p>
+        </div>
+
+        <div class="agents-grid">
+          <button class="agent agent-btn" type="button" data-agent="1">Agent 01</button><button class="agent agent-btn" type="button" data-agent="2">Agent 02</button><button class="agent agent-btn" type="button" data-agent="3">Agent 03</button>
+          <button class="agent agent-btn" type="button" data-agent="4">Agent 04</button><button class="agent agent-btn" type="button" data-agent="5">Agent 05</button><button class="agent agent-btn" type="button" data-agent="6">Agent 06</button>
+          <button class="agent agent-btn" type="button" data-agent="7">Agent 07</button><button class="agent agent-btn" type="button" data-agent="8">Agent 08</button><button class="agent agent-btn" type="button" data-agent="9">Agent 09</button>
+          <button class="agent agent-btn" type="button" data-agent="10">Agent 10</button><button class="agent agent-btn" type="button" data-agent="11">Agent 11</button><button class="agent agent-btn" type="button" data-agent="12">Agent 12</button>
+          <button class="agent agent-btn" type="button" data-agent="13">Agent 13</button><button class="agent agent-btn" type="button" data-agent="14">Agent 14</button>
+        </div>
+
+        <div id="agentOutput" class="output-card show" aria-live="polite">
+          <p class="output-label">Agent Output</p>
+          <p class="output-title">Agent 01: Subdomain Enumeration</p>
+          <p class="output-text">Discovers subdomains and expands the external attack surface map.</p>
+        </div>
+
+        <div class="phase">
+          <span class="parallel">Parallel Phase: Recon, discovery, fingerprinting</span>
+          <span class="sequential">Sequential Phase: Validation, correlation, reporting</span>
+        </div>
+      </article>
+    </section>
+
+    <section class="section reveal-section grid-2">
+      <!-- Feature Highlights -->
+      <article class="panel feature-wrap">
+        <div class="section-head">
+          <p class="section-kicker">Core Value</p>
+          <h2 class="section-title">Feature Highlights</h2>
+          <p class="section-desc">Product-first capabilities designed for offensive security teams.</p>
+        </div>
+
+        <div class="feature-grid">
+          <div class="feature">
+            <div class="icon">[::]</div>
+            <h3>Distributed Execution</h3>
+            <p>Scale scanning with remote workers while preserving centralized orchestration.</p>
+          </div>
+
+          <div class="feature">
+            <div class="icon">[+]</div>
+            <h3>Evidence-Based Validation</h3>
+            <p>Confirm findings through validation gates before reporting to reduce false positives.</p>
+          </div>
+
+          <div class="feature">
+            <div class="icon">[->]</div>
+            <h3>Correlation Engine</h3>
+            <p>Connect weak signals into realistic attack paths with confidence-weighted context.</p>
+          </div>
+
+          <div class="feature">
+            <div class="icon">[AI]</div>
+            <h3>LLM Intelligence</h3>
+            <p>Leverage OpenAI or Ollama models for prioritization and executive-ready synthesis.</p>
+          </div>
+        </div>
+      </article>
+
+      <!-- Live Terminal Preview -->
+      <article class="panel terminal-wrap" id="live-terminal">
+        <div class="section-head">
+          <p class="section-kicker">Runtime Snapshot</p>
+          <h2 class="section-title">Live Terminal Preview</h2>
+          <p class="section-desc">Simulated operation feed showing recon to validated intelligence flow.</p>
+        </div>
+
+        <div class="live-terminal">
+          <div class="scanline"></div>
+          <div id="liveLines" class="live-lines"></div>
+        </div>
+      </article>
+    </section>
+
+    <!-- Tech Stack -->
+    <section class="section reveal-section">
+      <article class="panel stack-wrap">
+        <div class="section-head">
+          <p class="section-kicker">Platform</p>
+          <h2 class="section-title">Tech Stack</h2>
+          <p class="section-desc">Lightweight, scalable, and integration-ready security stack.</p>
+        </div>
+
+        <div class="stack-pills">
+          <span class="stack-pill">Python</span>
+          <span class="stack-pill">LangGraph</span>
+          <span class="stack-pill">FastAPI</span>
+          <span class="stack-pill">AsyncIO</span>
+          <span class="stack-pill">Ollama</span>
+          <span class="stack-pill">OpenAI API</span>
+          <span class="stack-pill">Nmap Tooling</span>
+          <span class="stack-pill">Structured JSON Reports</span>
+          <span class="stack-pill">PDF Reporting</span>
+          <span class="stack-pill">Distributed Workers</span>
+        </div>
+      </article>
+    </section>
+
+    <!-- About -->
+    <section class="section reveal-section" id="about">
+      <article class="panel about-wrap">
+        <div class="section-head">
+          <p class="section-kicker">Profile</p>
+          <h2 class="section-title">About Me</h2>
+        </div>
+        <p><strong>Yaswanth</strong></p>
+        <p>AI Security Researcher | Agentic & MCP Security | Penetration Tester | Ethical Hacking & Red Teaming</p>
+        <p>Focused on building production-grade offensive security platforms that prioritize evidence, confidence scoring, and practical remediation intelligence.</p>
+      </article>
+    </section>
+
+    <!-- Bottom CTA -->
+    <section class="section reveal-section" id="contact">
+      <article class="panel cta-wrap">
+        <div class="section-head">
+          <p class="section-kicker">Call To Action</p>
+          <h2 class="section-title">Build, Break, Secure</h2>
+          <p class="section-desc">Explore the project, run the demo flow, or connect for offensive security and AI security roles.</p>
+        </div>
+
+        <div class="cta-actions">
+          <a class="btn btn-primary glow" href="https://github.com/Yaswanthbhathrasamy/Recon_Agent" target="_blank" rel="noreferrer">Run Demo / View Code</a>
+          <a class="btn btn-tertiary glow" href="https://www.linkedin.com/in/yaswanth-b-b21334283/" target="_blank" rel="noreferrer">Hire Me / Contact</a>
+        </div>
+
+        <p class="cta-email">Email: <a href="mailto:yaswanthvisa@gmail.com">yaswanthvisa@gmail.com</a></p>
+      </article>
+    </section>
+
+    <p class="footer">Recon Agents Product Interface - Designed for Security Engineering and Offensive Research Workflows</p>
+  </main>
+
+  <script>
+/* =========================
+   HERO TYPEWRITER
+========================= */
+const heroTarget = document.getElementById("heroTitle");
+
+if (heroTarget) {
+  const heroPhrases = [
+    "Recon Agents Control Plane",
+    "Autonomous Recon + Validation",
+    "Signal-Driven Security Intelligence"
+  ];
+
+  let phraseIndex = 0;
+  let charIndex = 0;
+  let deleting = false;
+
+  function typeHero() {
+    const current = heroPhrases[phraseIndex];
+    const speed = deleting ? 34 : 58;
+
+    heroTarget.innerHTML =
+      `${current.slice(0, charIndex)}<span class="cursor"></span>`;
+
+    if (!deleting) {
+      charIndex++;
+      if (charIndex > current.length) {
+        deleting = true;
+        setTimeout(typeHero, 1000);
+        return;
+      }
+    } else {
+      charIndex--;
+      if (charIndex < 0) {
+        deleting = false;
+        phraseIndex = (phraseIndex + 1) % heroPhrases.length;
+        charIndex = 0;
+      }
+    }
+
+    setTimeout(typeHero, speed);
+  }
+
+  typeHero();
+}
+
+/* =========================
+   HERO TERMINAL
+========================= */
+const heroTerm = document.getElementById("heroTerminal");
+
+if (heroTerm) {
+  const heroLines = [
+    "Initializing Recon Agents...",
+    "Loading 14 autonomous workers...",
+    "Recon modules: subdomain, dns, ports, crawling...",
+    "Validation layer online -> false-positive pruning enabled",
+    "Correlation graph compiled",
+    "LLM intelligence provider: standby",
+    "Status: SCAN READY"
+  ];
+
+  heroLines.forEach((line, i) => {
+    const row = document.createElement("div");
+    row.className = "term-line";
+    row.innerHTML = `<span class="prompt">></span>${line}`;
+    heroTerm.appendChild(row);
+
+    setTimeout(() => row.classList.add("visible"), 180 + i * 210);
+  });
+}
+
+/* =========================
+   LIVE TERMINAL
+========================= */
+const liveTarget = document.getElementById("liveLines");
+
+if (liveTarget) {
+  const liveFeed = [
+    "scanning target: example.com",
+    "subdomains found: 37",
+    "open ports detected: 80, 443, 8080",
+    "endpoints discovered: 142",
+    "potential vulnerabilities: 21",
+    "validated findings: 9",
+    "false positives pruned: 57%",
+    "correlated attack paths: 4",
+    "intelligence summary generated"
+  ];
+
+  function loopLiveFeed() {
+    liveTarget.innerHTML = "";
+
+    liveFeed.forEach((line, i) => {
+      const row = document.createElement("div");
+      row.className = "term-line";
+      row.innerHTML = `<span class="prompt">></span>${line}`;
+      liveTarget.appendChild(row);
+
+      setTimeout(() => row.classList.add("visible"), 140 + i * 180);
+    });
+
+    setTimeout(loopLiveFeed, 5000);
+  }
+
+  loopLiveFeed();
+}
+
+/* =========================
+   SCROLL REVEAL
+========================= */
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    if (entry.isIntersecting) {
+      const delay = Number(entry.target.dataset.delay || 0);
+      setTimeout(() => entry.target.classList.add("visible"), delay);
+      observer.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.12 });
+
+document.querySelectorAll(".reveal-section").forEach((el, idx) => {
+  el.dataset.delay = String(80 + idx * 70);
+  observer.observe(el);
+});
+
+document.querySelectorAll(".reveal-item").forEach((el, idx) => {
+  el.dataset.delay = String(120 + idx * 120);
+  observer.observe(el);
+});
+
+/* =========================
+   FLOW INTERACTION
+========================= */
+const flowSteps = {
+  1: { title: "Step 01: Input", text: "User provides target domain and selects scan mode." },
+  2: { title: "Step 02: Recon Agents", text: "14 agents perform parallel reconnaissance." },
+  3: { title: "Step 03: Validation", text: "False positives removed via evidence-based filtering." },
+  4: { title: "Step 04: Correlation", text: "Signals combined into attack paths." },
+  5: { title: "Step 05: Intelligence", text: "Final report with severity and recommendations." }
+};
+
+const flowButtons = document.querySelectorAll(".step-btn");
+const flowOutput = document.getElementById("flowOutput");
+
+function renderOutputCard(card, label, title, text) {
+  if (!card) return;
+
+  card.classList.remove("show");
+
+  setTimeout(() => {
+    card.innerHTML = `
+      <p class="output-label">${label}</p>
+      <p class="output-title">${title}</p>
+      <p class="output-text">${text}</p>
+    `;
+    card.classList.add("show");
+  }, 120);
+}
+
+flowButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const key = Number(btn.dataset.step);
+    const data = flowSteps[key];
+
+    if (!data) return;
+
+    flowButtons.forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+
+    renderOutputCard(flowOutput, "Flow Output", data.title, data.text);
+  });
+});
+
+/* =========================
+   AGENT INTERACTION
+========================= */
+const agentInfo = {
+  1: "Subdomain Enumeration",
+  2: "DNS Resolution",
+  3: "Live Host Detection",
+  4: "Port Scanning (Nmap)",
+  5: "Technology Fingerprinting",
+  6: "Web Crawling",
+  7: "JavaScript Analysis",
+  8: "Parameter Discovery",
+  9: "Security Header Analysis",
+  10: "Sensitive File Detection",
+  11: "Vulnerability Pattern Scan (Nuclei)",
+  12: "Validation Engine",
+  13: "Correlation Engine",
+  14: "Final Intelligence Engine"
+};
+
+const agentButtons = document.querySelectorAll(".agent-btn");
+const agentOutput = document.getElementById("agentOutput");
+
+agentButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const key = Number(btn.dataset.agent);
+    const name = agentInfo[key];
+
+    if (!name) return;
+
+    agentButtons.forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+
+    renderOutputCard(
+      agentOutput,
+      "Agent Output",
+      `Agent ${String(key).padStart(2, "0")}: ${name}`,
+      "This agent contributes structured evidence into the pipeline and feeds validation + correlation stages."
+    );
+  });
+});
+</script>
+</body>
+</html>

@@ -63,6 +63,8 @@ from src.core.logging_utils import configure_logging
 from src.core.schemas import AttackCategory, DecisionEngineOutput, DecisionFinding, ModeType, ScanType
 from src.distributed.controller import ReconController
 from src.intel.final_analysis import finalize_security_insights
+from src.llm import PROVIDERS, build_client, get_provider, list_providers
+from src.llm.base import LLMError
 from src.workflow.reporting import generate_json_report, generate_pdf_report
 
 import requests as _requests
@@ -298,7 +300,7 @@ def _build_decision_output(final_report: dict, categories: List[AttackCategory])
 
     findings: list[DecisionFinding] = []
     mode = str(final_report.get("mode", "recon"))
-    attack_focus_types = {"Injection", "Auth", "Misconfiguration"}
+    attack_focus_types = {"Injection", "XSS", "Auth", "Access Control", "Web Attacks", "Advanced", "Misconfiguration"}
 
     for task_item in final_report.get("task_results", []):
         for finding in task_item.get("findings", []):
@@ -354,7 +356,7 @@ def _build_decision_output(final_report: dict, categories: List[AttackCategory])
 
 def _collect_preliminary_findings(final_report: dict, categories: List[AttackCategory]) -> list[dict]:
     mode = str(final_report.get("mode", "recon"))
-    attack_focus_types = {"Injection", "Auth", "Misconfiguration"}
+    attack_focus_types = {"Injection", "XSS", "Auth", "Access Control", "Web Attacks", "Advanced", "Misconfiguration"}
     out: list[dict] = []
 
     for task_item in final_report.get("task_results", []):
@@ -389,6 +391,56 @@ def _collect_preliminary_findings(final_report: dict, categories: List[AttackCat
     return out
 
 
+def _choose_llm(args) -> tuple[str, str, str | None]:
+    """Registry-driven backend selection: provider -> API key -> model.
+
+    Every provider in ``src.llm.PROVIDERS`` is offered; adding a backend there
+    makes it appear here automatically.
+    """
+    # ── STAGE 01: LLM Provider ───────────────────────────────────────
+    _step_title(1, "Intelligence Backend")
+    specs = list_providers()
+    labels = [s.label for s in specs]
+    default_idx = 1
+    if args.llm_provider:
+        for i, s in enumerate(specs, start=1):
+            if s.id == args.llm_provider:
+                default_idx = i
+                break
+    chosen_label = _select("select an LLM provider:", labels, default=default_idx)
+    spec = specs[labels.index(chosen_label)]
+
+    # API key (only if the provider needs one)
+    api_key: str | None = None
+    if spec.requires_api_key:
+        _step_title(2, f"{spec.label.strip()} — API Key")
+        env_key = os.environ.get(spec.api_key_env or "", "") if spec.api_key_env else ""
+        api_key = args.api_key or env_key or Prompt.ask(
+            f"    [bright_red]⟫[/bright_red] [dim]api key [{spec.api_key_hint}][/dim]",
+            password=True,
+        )
+        if not api_key or not api_key.strip():
+            console.print("    [bright_red]✘ FATAL:[/bright_red] An API key is required for this provider.")
+            sys.exit(1)
+        if spec.api_key_env:
+            os.environ[spec.api_key_env] = api_key
+
+    # Model
+    _step_title(3, f"{spec.label.strip()} — Model")
+    models = spec.available_models(api_key)
+    if args.llm_model:
+        model = args.llm_model
+        console.print(f"    [dim]model →[/dim] [bright_cyan]{model}[/bright_cyan]")
+    elif models:
+        default_model_idx = models.index(spec.default_model) + 1 if spec.default_model in models else 1
+        model = _select("select model:", models, default=default_model_idx)
+    else:
+        model = spec.default_model
+
+    _persist_llm_config(provider=spec.id, model=model, api_key=api_key)
+    return spec.id, model, api_key
+
+
 def _interactive_flow(args) -> tuple[str, ModeType, List[AttackCategory], ScanType, str, str, str | None]:
     console.clear()
     console.print(_BANNER)
@@ -399,40 +451,19 @@ def _interactive_flow(args) -> tuple[str, ModeType, List[AttackCategory], ScanTy
         padding=(0, 2),
     ))
 
-    # ── STAGE 01: LLM Provider ───────────────────────────────────────
-    _step_title(1, "Intelligence Backend")
-    provider = _select("", ["OpenAI  ⟨cloud⟩", "Ollama  ⟨local⟩"])
-    if provider.startswith("OpenAI"):
-        _step_title(2, "OpenAI Configuration")
-        api_key = args.api_key or Prompt.ask("    [bright_red]⟫[/bright_red] [dim]api key[/dim]", password=True)
-        if not _validate_openai_key(api_key):
-            console.print("    [bright_red]✘ FATAL:[/bright_red] Invalid API key. Expected format: [dim]sk-...[/dim]")
-            sys.exit(1)
-        model = args.llm_model or _select("Model:", ["gpt-4o", "gpt-4", "gpt-4.1-mini"])
-        os.environ["OPENAI_API_KEY"] = api_key
-        provider_id = "openai"
-    else:
-        _step_title(2, "Ollama Configuration")
-        models = _list_ollama_models()
-        if not models:
-            console.print("    [bright_red]✘ FATAL:[/bright_red] No models found. Run: [accent]ollama pull llama3[/accent]")
-            sys.exit(1)
-        model = args.llm_model if args.llm_model in models else _select("Model:", models)
-        api_key = None
-        provider_id = "ollama"
+    # ── STAGES 01-03: LLM backend (provider -> API key -> model) ─────
+    provider_id, model, api_key = _choose_llm(args)
 
-    _persist_llm_config(provider=provider_id, model=model, api_key=api_key)
-
-    # ── STAGE 03: Target ─────────────────────────────────────────────
-    _step_title(3, "Target Acquisition")
+    # ── STAGE 04: Target ─────────────────────────────────────────────
+    _step_title(4, "Target Acquisition")
     target = args.target or Prompt.ask("    [bright_red]⟫[/bright_red] [dim]target[/dim]")
     if not _is_valid_domain_or_url(target):
         console.print("    [bright_red]✘ FATAL:[/bright_red] Invalid target domain format.")
         sys.exit(1)
     console.print(f"    [dim]locked on →[/dim] [bright_cyan]{target}[/bright_cyan]")
 
-    # ── STAGE 04: Mode ───────────────────────────────────────────────
-    _step_title(4, "Operation Mode")
+    # ── STAGE 05: Mode ───────────────────────────────────────────────
+    _step_title(5, "Operation Mode")
     mode_label = _select(
         "",
         [
@@ -451,17 +482,28 @@ def _interactive_flow(args) -> tuple[str, ModeType, List[AttackCategory], ScanTy
     # ── STAGE 05: Categories ─────────────────────────────────────────
     categories: List[AttackCategory] = []
     if mode != "recon":
-        _step_title(5, "Attack Vector Selection")
+        _step_title(6, "Attack Vector Selection")
         console.print("    [dim]comma-separated indexes · blank = all vectors[/dim]")
         for idx, name in enumerate(CATEGORY_OPTIONS, start=1):
             console.print(f"    [dim]  [{idx}][/dim] [bright_green]{name}[/bright_green]")
         raw = Prompt.ask("    [bright_red]⟫[/bright_red] [dim]vectors[/dim]", default="")
         categories = _parse_categories(raw)
 
-    # ── STAGE 06: Scan Type ──────────────────────────────────────────
-    _step_title(6, "Scan Depth")
+    # ── STAGE 07: Scan Type ──────────────────────────────────────────
+    _step_title(7, "Scan Depth")
     scan_choice = _select("", ["Fast  ⟨120s timeout⟩", "Deep  ⟨300s timeout⟩"])
     scan_type: ScanType = "deep" if scan_choice.startswith("Deep") else "fast"
+
+    # ── STAGE 08: Autonomy ───────────────────────────────────────────
+    _step_title(8, "Orchestration")
+    if provider_id == "none":
+        args.agentic = False
+        console.print("    [dim]autonomous mode needs an LLM · using deterministic pipeline[/dim]")
+    else:
+        args.agentic = Confirm.ask(
+            "    [bright_red]⟫[/bright_red] [accent]Autonomous agent?[/accent] [dim](LLM chooses tools dynamically)[/dim]",
+            default=False,
+        )
 
     # ── Config Summary ───────────────────────────────────────────────
     console.print()
@@ -479,6 +521,7 @@ def _interactive_flow(args) -> tuple[str, ModeType, List[AttackCategory], ScanTy
     table.add_row("[bright_green]MODE[/bright_green]", mode)
     table.add_row("[bright_green]VECTORS[/bright_green]", ", ".join(categories) if categories else "ALL")
     table.add_row("[bright_green]DEPTH[/bright_green]", scan_type.upper())
+    table.add_row("[bright_green]ORCHESTRATION[/bright_green]", "AUTONOMOUS AGENT" if args.agentic else "DETERMINISTIC PIPELINE")
     console.print(table)
     console.print()
 
@@ -521,9 +564,10 @@ def main():
     parser.add_argument("--mode", choices=["recon", "recon_attack", "attack"], help="Execution mode")
     parser.add_argument("--categories", help="Comma-separated categories, e.g. Injection,XSS,Auth")
     parser.add_argument("--scan-type", choices=["fast", "deep"], help="Scan depth")
-    parser.add_argument("--llm-provider", choices=["openai", "ollama"], help="LLM provider")
+    parser.add_argument("--llm-provider", choices=list(PROVIDERS.keys()), help="LLM provider")
     parser.add_argument("--llm-model", help="LLM model name")
     parser.add_argument("--api-key", help="API key for OpenAI provider")
+    parser.add_argument("--agentic", action="store_true", help="Autonomous LLM-driven agent loop (dynamically chooses which tools to run)")
     parser.add_argument("--yes", action="store_true", help="Run non-interactively with provided flags")
     parser.add_argument("--json-only", action="store_true", help="Print strict JSON output only")
     parser.add_argument("--run-worker", action="store_true", help="Run this node as a FastAPI worker")
@@ -539,7 +583,7 @@ def main():
     logger = logging.getLogger("recon.main")
 
     if args.run_worker:
-        print(_c("[*] Starting worker API...", Theme.BLUE))
+        console.print("  [accent]▸ Starting worker API...[/accent]")
         uvicorn.run("src.distributed.worker_api:app", host=args.worker_host, port=args.worker_port)
         return
 
@@ -556,16 +600,17 @@ def main():
         else:
             categories = _parse_categories(args.categories or "")
         provider_id = args.llm_provider or "openai"
-        model = args.llm_model or ("gpt-4o" if provider_id == "openai" else "llama3")
-        api_key = args.api_key
-        if provider_id == "openai" and not _validate_openai_key(api_key or ""):
-            parser.error("Invalid OpenAI API key format; expected key starting with 'sk-'")
-        if provider_id == "ollama":
-            models = _list_ollama_models()
-            if not models:
-                parser.error("No models found. Run: ollama pull llama3")
-            if model not in models:
-                parser.error("Invalid Ollama model; use one from `ollama list`")
+        spec = get_provider(provider_id)
+        model = args.llm_model or spec.default_model
+        env_key = os.environ.get(spec.api_key_env, "") if spec.api_key_env else ""
+        api_key = args.api_key or env_key or None
+        if spec.requires_api_key and not (api_key and api_key.strip()):
+            parser.error(
+                f"Provider '{provider_id}' requires --api-key"
+                + (f" (or {spec.api_key_env})" if spec.api_key_env else "")
+            )
+        if spec.api_key_env and api_key:
+            os.environ[spec.api_key_env] = api_key
         _persist_llm_config(provider=provider_id, model=model, api_key=api_key)
     else:
         target, mode, categories, scan_type, provider_id, model, api_key = _interactive_flow(args)
@@ -609,6 +654,7 @@ def main():
                 mode=mode,
                 categories=categories,
                 scan_type=scan_type,
+                agentic=bool(args.agentic),
             )
         )
         
@@ -684,7 +730,10 @@ def main():
                 "technologies": _extract_tech_from_task(_result_by_task(final_report, "technology_fingerprinting")),
             },
             "attack_surface": {
-                "endpoints": ep_task.get("data", {}).get("endpoints", []),
+                "endpoints": sorted(set(
+                    ep_task.get("data", {}).get("endpoints", [])
+                    + _result_by_task(final_report, "api_discovery").get("data", {}).get("endpoints", [])
+                )),
                 "parameters": _result_by_task(final_report, "parameter_discovery").get("data", {}).get("parameters", []),
                 "files": file_task.get("data", {}).get("files", file_task.get("data", {}).get("interesting_paths", [])),
                 "headers": list(header_task.get("data", {}).get("security_headers", {}).keys()) or [
@@ -694,6 +743,13 @@ def main():
             },
             "preliminary_findings": _collect_preliminary_findings(final_report, categories),
         }
+        try:
+            llm_client = build_client(provider_id, model, api_key)
+        except LLMError as exc:
+            llm_client = None
+            if not args.json_only:
+                console.print(f"  [highlight][!] LLM disabled:[/highlight] [dim]{exc}[/dim]")
+
         final_output = finalize_security_insights(
             analysis_input,
             errors=final_report.get("errors", []),
@@ -703,10 +759,41 @@ def main():
             scan_type=scan_type,
             provider=provider_id,
             model=model,
+            llm_client=llm_client,
+            agent_trace=final_report.get("agent_trace", []),
         )
 
         if not args.json_only and final_output.get("summary", {}).get("total_findings", 0) == 0:
             console.print("[dim][-] No results found[/dim]")
+
+        if not args.json_only:
+            trace = final_output.get("agent_trace", []) or []
+            if trace:
+                console.print("\n  [bright_red]▸[/bright_red] [accent]AUTONOMOUS AGENT LOG[/accent] [dim]· LLM-driven tool selection[/dim]")
+                for st in trace:
+                    tasks = ", ".join(st.get("tasks", [])) or "—"
+                    action = str(st.get("action", "")).upper()
+                    console.print(f"    [dim]step {st.get('step')}[/dim] [bright_cyan]{action}[/bright_cyan] [bright_green]→[/bright_green] {tasks}")
+                    if st.get("reason"):
+                        console.print(f"      [dim]{st['reason']}[/dim]")
+
+        if not args.json_only:
+            intel = final_output.get("intelligence", {})
+            summary_text = str(intel.get("executive_summary", "")).strip()
+            if summary_text:
+                console.print(
+                    f"\n  [bright_red]▸[/bright_red] [accent]INTELLIGENCE BRIEF[/accent] "
+                    f"[dim]· engine: {intel.get('engine', 'deterministic')}[/dim]"
+                )
+                console.print(Panel(summary_text, border_style="bright_green", expand=False, padding=(0, 2)))
+            paths = intel.get("attack_paths", []) or []
+            if paths:
+                console.print("  [bright_red]▸[/bright_red] [accent]ATTACK PATHS[/accent]")
+                for p in paths[:5]:
+                    sev = str(p.get("severity", "")).upper()
+                    console.print(f"    [bright_cyan]◈ {p.get('title', '')}[/bright_cyan] [dim]({sev})[/dim]")
+                    for i, step in enumerate(p.get("steps", [])[:6], start=1):
+                        console.print(f"      [dim]{i}.[/dim] {step}")
 
         if args.format in ["json", "both"]:
             try:

@@ -33,6 +33,13 @@ TaskType = Literal[
     "header_analysis",
     "sensitive_file_detection",
     "vuln_pattern_detection",
+    # Surface-level active attack agents
+    "sqli_testing",
+    "xss_testing",
+    # API reconnaissance + attack agents
+    "api_discovery",
+    "api_attack_surface",
+    # Post-processing agents
     "finding_validation",
     "correlation_analysis",
     "final_intelligence",
@@ -87,6 +94,16 @@ class RiskInsight(BaseModel):
     related_tasks: List[TaskType] = Field(default_factory=list)
 
 
+class AgentStep(BaseModel):
+    """One decision in the autonomous agent loop."""
+
+    step: int
+    thought: str = ""
+    action: str = "run"  # "run" | "finish"
+    tasks: List[str] = Field(default_factory=list)
+    reason: str = ""
+
+
 class FinalScanReport(BaseModel):
     scan_id: str
     target: str
@@ -98,6 +115,8 @@ class FinalScanReport(BaseModel):
     task_results: List[TaskResult]
     insights: List[RiskInsight] = Field(default_factory=list)
     errors: List[str] = Field(default_factory=list)
+    agentic: bool = False
+    agent_trace: List[AgentStep] = Field(default_factory=list)
 
 
 class DecisionFinding(BaseModel):
@@ -203,12 +222,40 @@ class ScanSummary(BaseModel):
     risk_score: RiskScore = "low"
 
 
+class AttackPath(BaseModel):
+    title: str
+    severity: Severity = "medium"
+    steps: List[str] = Field(default_factory=list)
+    related_signals: List[str] = Field(default_factory=list)
+
+
+class SeverityReview(BaseModel):
+    finding_id: str
+    suggested_severity: Severity
+    reason: str = ""
+
+
+class IntelligenceSection(BaseModel):
+    """LLM-authored analysis layered on top of the deterministic findings.
+
+    ``engine`` records which model produced it (e.g. ``anthropic:claude-opus-4-8``)
+    or ``deterministic`` when no LLM was configured.
+    """
+
+    engine: str = "deterministic"
+    executive_summary: str = ""
+    attack_paths: List[AttackPath] = Field(default_factory=list)
+    severity_reviews: List[SeverityReview] = Field(default_factory=list)
+
+
 class FullScanOutput(BaseModel):
     meta: ScanMeta
     recon: ReconSection = Field(default_factory=ReconSection)
     attack_surface: AttackSurfaceSection = Field(default_factory=AttackSurfaceSection)
     findings: List[FullFinding] = Field(default_factory=list)
     correlation: List[CorrelationEntry] = Field(default_factory=list)
+    intelligence: IntelligenceSection = Field(default_factory=IntelligenceSection)
+    agent_trace: List[AgentStep] = Field(default_factory=list)
     summary: ScanSummary = Field(default_factory=ScanSummary)
 
 
